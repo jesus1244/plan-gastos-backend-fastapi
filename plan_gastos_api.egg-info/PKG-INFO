@@ -1,0 +1,162 @@
+Metadata-Version: 2.4
+Name: plan-gastos-api
+Version: 0.1.0
+Summary: Backend base para la app Plan Gastos
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: sqlalchemy>=2.0.30
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: psycopg[binary]>=3.1.18
+Requires-Dist: pydantic-settings>=2.2.1
+Requires-Dist: firebase-admin>=6.5.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: httpx>=0.27.0; extra == "dev"
+
+# Plan Gastos API
+
+Backend FastAPI para la aplicación Plan Gastos.
+
+## Requisitos
+
+- Python 3.11+
+- Docker Desktop o Docker Engine con Docker Compose
+- PostgreSQL 16 (cuando se ejecuta sin Docker)
+- Firebase project con service account credentials válidas para Firebase Admin SDK
+
+## Configuración local
+
+Copia el ejemplo de entorno:
+
+```bash
+cp .env.example .env
+```
+
+Ajusta los valores. En Firebase Admin SDK es necesario definir:
+
+```env
+FIREBASE_PROJECT_ID=example-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@example.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nexample-private-key\n-----END PRIVATE KEY-----\n"
+```
+
+No se debe commitear un `.env` real ni credenciales de Firebase reales.
+
+## Instalar dependencias
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+En Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Luego:
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Ejecutar la API localmente
+
+```bash
+uvicorn app.main:app --reload
+```
+
+La API estará disponible en:
+
+- http://127.0.0.1:8000
+- Swagger UI: http://127.0.0.1:8000/docs
+- OpenAPI: http://127.0.0.1:8000/openapi.json
+
+## Autenticación Firebase
+
+El backend valida Firebase ID Tokens mediante el header:
+
+```http
+Authorization: Bearer <ID_TOKEN>
+```
+
+### GET /api/me
+
+- sin token: `401 Unauthorized`
+- token mal formado: `401 Unauthorized`
+- token inválido: `401 Unauthorized`
+- token válido: `200 OK` con el usuario autenticado
+
+El usuario se crea o sincroniza en la tabla `users` usando el `firebase_uid`.
+
+## Budgets por usuario autenticado
+
+Los endpoints de budgets están aislados por usuario. Cada budget pertenece al usuario autenticado y se valida el `user_id` del token sobre PostgreSQL.
+
+### Endpoints
+
+```http
+GET /api/budgets
+GET /api/budgets/{budget_id}
+POST /api/budgets
+PATCH /api/budgets/{budget_id}
+DELETE /api/budgets/{budget_id}
+```
+
+- Todos requieren autenticación Firebase.
+- Budget ajeno o inexistente responde `404`.
+- Duplicado de `user_id + month_key` responde `409`.
+- Las validaciones de nombre, month_key y base_salary se aplican con Pydantic.
+
+## Salary discounts por budget autenticado
+
+Los descuentos salariales se gestionan bajo ownership del budget. La validación se hace chequeando que el `budget.user_id` corresponda al usuario autenticado antes de crear, listar, consultar, actualizar o borrar descuentos.
+
+### Endpoints
+
+```http
+GET /api/budgets/{budget_id}/discounts
+POST /api/budgets/{budget_id}/discounts
+GET /api/budgets/{budget_id}/discounts/{discount_id}
+PATCH /api/budgets/{budget_id}/discounts/{discount_id}
+DELETE /api/budgets/{budget_id}/discounts/{discount_id}
+```
+
+- Todos requieren autenticación Firebase.
+- Budget ajeno o inexistente responde `404`.
+- Recurso ajeno o inexistente responde `404`.
+- El `percentage` se valida con `Decimal` y rango `0..100`.
+
+## Ejecutar con Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Esto levantará PostgreSQL y la API, y antes de arrancar FastAPI ejecutará:
+
+```bash
+alembic upgrade head
+```
+
+## Ejecutar migraciones manualmente
+
+```bash
+alembic upgrade head
+```
+
+## Ejecutar tests
+
+```bash
+pytest
+```
+
+## Detener entorno
+
+```bash
+docker compose down
+```
