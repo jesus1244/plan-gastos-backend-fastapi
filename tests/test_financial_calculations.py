@@ -45,28 +45,28 @@ def test_base_hour_value_uses_decimal_precision() -> None:
 
 
 def test_overtime_ordinary_day_multiplier() -> None:
-    result = calculate_overtime_income(Decimal('3000000'), {'ordinary_day_hours': Decimal('1.00')})
+    result = calculate_overtime_income(Decimal('3000000'), [{'hours': Decimal('1.00'), 'type': 'ordinary', 'shift': 'day'}])
     expected = Decimal('3000000') / Decimal('240') * OVERTIME_MULTIPLIERS['ordinary_day']
     assert result == expected.quantize(Decimal('0.01'))
     assert OVERTIME_MULTIPLIERS['ordinary_day'] == Decimal('1.25')
 
 
 def test_overtime_ordinary_night_multiplier() -> None:
-    result = calculate_overtime_income(Decimal('3000000'), {'ordinary_night_hours': Decimal('1.00')})
+    result = calculate_overtime_income(Decimal('3000000'), [{'hours': Decimal('1.00'), 'type': 'ordinary', 'shift': 'night'}])
     expected = Decimal('3000000') / Decimal('240') * OVERTIME_MULTIPLIERS['ordinary_night']
     assert result == expected.quantize(Decimal('0.01'))
     assert OVERTIME_MULTIPLIERS['ordinary_night'] == Decimal('1.75')
 
 
 def test_overtime_sunday_day_multiplier() -> None:
-    result = calculate_overtime_income(Decimal('3000000'), {'sunday_day_hours': Decimal('1.00')})
+    result = calculate_overtime_income(Decimal('3000000'), [{'hours': Decimal('1.00'), 'type': 'sunday', 'shift': 'day'}])
     expected = Decimal('3000000') / Decimal('240') * OVERTIME_MULTIPLIERS['sunday_day']
     assert result == expected.quantize(Decimal('0.01'))
     assert OVERTIME_MULTIPLIERS['sunday_day'] == Decimal('2.00')
 
 
 def test_overtime_sunday_night_multiplier() -> None:
-    result = calculate_overtime_income(Decimal('3000000'), {'sunday_night_hours': Decimal('1.00')})
+    result = calculate_overtime_income(Decimal('3000000'), [{'hours': Decimal('1.00'), 'type': 'sunday', 'shift': 'night'}])
     expected = Decimal('3000000') / Decimal('240') * OVERTIME_MULTIPLIERS['sunday_night']
     assert result == expected.quantize(Decimal('0.01'))
     assert OVERTIME_MULTIPLIERS['sunday_night'] == Decimal('2.50')
@@ -75,12 +75,12 @@ def test_overtime_sunday_night_multiplier() -> None:
 def test_overtime_combined_hours() -> None:
     result = calculate_overtime_income(
         Decimal('3000000'),
-        {
-            'ordinary_day_hours': Decimal('1.00'),
-            'ordinary_night_hours': Decimal('1.00'),
-            'sunday_day_hours': Decimal('1.00'),
-            'sunday_night_hours': Decimal('1.00'),
-        },
+        [
+            {'hours': Decimal('1.00'), 'type': 'ordinary', 'shift': 'day'},
+            {'hours': Decimal('1.00'), 'type': 'ordinary', 'shift': 'night'},
+            {'hours': Decimal('1.00'), 'type': 'sunday', 'shift': 'day'},
+            {'hours': Decimal('1.00'), 'type': 'sunday', 'shift': 'night'},
+        ],
     )
     expected = (
         (Decimal('3000000') / Decimal('240'))
@@ -136,7 +136,7 @@ def test_negative_values_are_rejected() -> None:
         pass
 
     try:
-        calculate_overtime_income(Decimal('3000000'), {'ordinary_day_hours': Decimal('-1')})
+        calculate_overtime_income(Decimal('3000000'), [{'hours': Decimal('-1'), 'type': 'ordinary', 'shift': 'day'}])
         raise AssertionError('Expected ValueError')
     except ValueError:
         pass

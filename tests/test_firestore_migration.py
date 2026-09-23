@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.infrastructure.database.connection import SessionLocal
-from app.infrastructure.database.models import Budget, Expense, Income, Overtime, SalaryDiscount, User
+from app.infrastructure.database.models import Budget, Expense, Income, SalaryDiscount, User
 from app.infrastructure.migration.migrator import FirestoreMigrator
 
 
@@ -15,8 +15,6 @@ def _clear_user(firebase_uid: str) -> None:
         if user is None:
             return
         for budget in list(user.budgets):
-            if budget.overtime is not None:
-                session.delete(budget.overtime)
             session.delete(budget)
         session.delete(user)
         session.commit()
@@ -121,9 +119,6 @@ def test_generation2_month_migrates_budget_discounts_incomes_and_deduplicated_ex
                 {'id': 'expense-1', 'name': 'Arriendo', 'amount': 900000, 'type': 'fixed'},
                 {'id': 'expense-2', 'name': 'Internet', 'amount': 80000, 'type': 'other'},
             ],
-            'overtime': [
-                {'id': 'legacy-overtime', 'ordinaryDayHours': 3, 'ordinaryNightHours': 1, 'sundayDayHours': 3, 'sundayNightHours': 0.5}
-            ],
         }
 
         summary = _run_migration(
@@ -135,7 +130,6 @@ def test_generation2_month_migrates_budget_discounts_incomes_and_deduplicated_ex
         assert summary.discounts_migrated == 2
         assert summary.incomes_migrated == 1
         assert summary.expenses_migrated == 2
-        assert summary.overtime_migrated == 1
         assert summary.skipped_months == []
 
         with SessionLocal() as session:
@@ -153,9 +147,6 @@ def test_generation2_month_migrates_budget_discounts_incomes_and_deduplicated_ex
             expenses = session.execute(select(Expense).where(Expense.budget_id == budget.id)).scalars().all()
             assert {(e.name, e.type) for e in expenses} == {('Arriendo', 'fixed'), ('Internet', 'other')}
 
-            overtime = session.execute(select(Overtime).where(Overtime.budget_id == budget.id)).scalar_one()
-            assert overtime.ordinary_day_hours == Decimal('3.00') or overtime.ordinary_day_hours == Decimal('3')
-            assert overtime.sunday_night_hours == Decimal('0.50') or overtime.sunday_night_hours == Decimal('0.5')
     finally:
         _clear_user(uid)
 
@@ -170,7 +161,6 @@ def test_generation1_month_without_monthkey_is_skipped_and_reported() -> None:
             'extraIncome': [{'name': 'Bono', 'amount': 200000}],
             'expenses': [{'name': 'Arriendo', 'amount': 900000}],
             'otherExpenses': [{'name': 'Internet', 'amount': 80000}],
-            'overtime': {'days': {'5': {'diurnaOrd': 2, 'nocOrd': 1, 'diurnaDom': 0, 'nocDom': 0}}},
         }
 
         summary = _run_migration(
@@ -228,9 +218,6 @@ def test_generation1_month_with_valid_monthkey_migrates_fixed_and_other_expenses
             expenses = session.execute(select(Expense).where(Expense.budget_id == budget.id)).scalars().all()
             assert {(e.name, e.type) for e in expenses} == {('Arriendo', 'fixed'), ('Internet', 'other')}
 
-            overtime = session.execute(select(Overtime).where(Overtime.budget_id == budget.id)).scalar_one()
-            assert overtime.ordinary_day_hours == Decimal('2.00') or overtime.ordinary_day_hours == Decimal('2')
-            assert overtime.ordinary_night_hours == Decimal('1.00') or overtime.ordinary_night_hours == Decimal('1')
     finally:
         _clear_user(uid)
 
@@ -264,7 +251,6 @@ def test_month_with_no_optional_arrays_creates_budget_without_children() -> None
         assert summary.discounts_migrated == 0
         assert summary.incomes_migrated == 0
         assert summary.expenses_migrated == 0
-        assert summary.overtime_migrated == 0
     finally:
         _clear_user(uid)
 
@@ -310,7 +296,6 @@ def test_running_migration_twice_is_idempotent() -> None:
             'discounts': [{'name': 'Salud', 'percentage': 4, 'enabled': True}],
             'incomes': [{'name': 'Freelance', 'amount': 400000}],
             'expenses': [{'name': 'Arriendo', 'amount': 900000, 'type': 'fixed'}],
-            'overtime': [{'ordinaryDayHours': 3, 'ordinaryNightHours': 1, 'sundayDayHours': 0, 'sundayNightHours': 0}],
         }
         users_data = [(uid, {'months': {'2026-09': month_data}})]
         identity = {uid: ('idempotent@example.com', 'Idempotent User')}
@@ -325,7 +310,6 @@ def test_running_migration_twice_is_idempotent() -> None:
         assert second.discounts_migrated == 0
         assert second.incomes_migrated == 0
         assert second.expenses_migrated == 0
-        assert second.overtime_migrated == 1  # overtime is 1:1 and gets refreshed, never duplicated
 
         with SessionLocal() as session:
             user = session.execute(select(User).where(User.firebase_uid == uid)).scalar_one()
@@ -341,8 +325,6 @@ def test_running_migration_twice_is_idempotent() -> None:
             expenses = session.execute(select(Expense).where(Expense.budget_id == budgets[0].id)).scalars().all()
             assert len(expenses) == 1
 
-            overtime_rows = session.execute(select(Overtime).where(Overtime.budget_id == budgets[0].id)).scalars().all()
-            assert len(overtime_rows) == 1
     finally:
         _clear_user(uid)
 

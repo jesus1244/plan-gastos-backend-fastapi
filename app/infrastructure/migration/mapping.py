@@ -12,7 +12,7 @@ Generation 1 (legacy static HTML app, com.plan-gastos.app_web):
         extraIncome: [{name, amount}],
         expenses: [{name, amount}],          # "Gastos Fijos" -> type fixed
         otherExpenses: [{name, amount}],      # "Otros Gastos" -> type other
-        overtime: {days: {"<day>": {diurnaOrd, nocOrd, diurnaDom, nocDom}}},
+        overtime: legacy Firestore data is intentionally not migrated to the new detailed model,
     }
     There is no persisted discount entity; the 8% is hardcoded in the client.
 
@@ -25,7 +25,7 @@ Generation 2 (current Angular app, plan_gastos_app):
         incomes / extraIncome: [{id, name, amount}],
         expenses: [{id, name, amount, type: 'fixed' | 'other'}],
         otherExpenses: same array as `expenses` (mirrored on write),
-        overtime: [{id, ordinaryDayHours, ordinaryNightHours, sundayDayHours, sundayNightHours}],
+        overtime: legacy aggregate data is intentionally not migrated to the new detailed model,
     }
 """
 
@@ -59,13 +59,6 @@ class ParsedDiscount:
 
 
 @dataclass
-class ParsedOvertime:
-    ordinary_day_hours: Decimal
-    ordinary_night_hours: Decimal
-    sunday_day_hours: Decimal
-    sunday_night_hours: Decimal
-
-
 @dataclass
 class ParsedMonth:
     month_key: str
@@ -74,7 +67,6 @@ class ParsedMonth:
     discounts: list[ParsedDiscount] = field(default_factory=list)
     incomes: list[ParsedIncome] = field(default_factory=list)
     expenses: list[ParsedExpense] = field(default_factory=list)
-    overtime: ParsedOvertime | None = None
     issues: list[str] = field(default_factory=list)
 
 
@@ -230,46 +222,6 @@ def extract_expenses(month_data: dict) -> tuple[list[ParsedExpense], list[str]]:
     return results, issues
 
 
-def extract_overtime(month_data: dict) -> tuple[ParsedOvertime | None, list[str]]:
-    raw = month_data.get('overtime')
-    if raw is None:
-        return None, []
-
-    sums = {
-        'ordinary_day_hours': Decimal('0'),
-        'ordinary_night_hours': Decimal('0'),
-        'sunday_day_hours': Decimal('0'),
-        'sunday_night_hours': Decimal('0'),
-    }
-    entries_found = False
-
-    if isinstance(raw, dict) and isinstance(raw.get('days'), dict):
-        for day_data in raw['days'].values():
-            if not isinstance(day_data, dict):
-                continue
-            entries_found = True
-            sums['ordinary_day_hours'] += to_decimal(day_data.get('diurnaOrd')) or Decimal('0')
-            sums['ordinary_night_hours'] += to_decimal(day_data.get('nocOrd')) or Decimal('0')
-            sums['sunday_day_hours'] += to_decimal(day_data.get('diurnaDom')) or Decimal('0')
-            sums['sunday_night_hours'] += to_decimal(day_data.get('nocDom')) or Decimal('0')
-    elif isinstance(raw, list):
-        for entry in raw:
-            if not isinstance(entry, dict):
-                continue
-            entries_found = True
-            sums['ordinary_day_hours'] += to_decimal(entry.get('ordinaryDayHours')) or Decimal('0')
-            sums['ordinary_night_hours'] += to_decimal(entry.get('ordinaryNightHours')) or Decimal('0')
-            sums['sunday_day_hours'] += to_decimal(entry.get('sundayDayHours')) or Decimal('0')
-            sums['sunday_night_hours'] += to_decimal(entry.get('sundayNightHours')) or Decimal('0')
-    else:
-        return None, ['invalid_overtime_structure']
-
-    if not entries_found:
-        return None, []
-
-    return ParsedOvertime(**sums), []
-
-
 def extract_month_name(month_data: dict, fallback: str) -> str:
     raw_name = month_data.get('name')
     return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else fallback
@@ -290,7 +242,6 @@ def parse_month(month_data: dict) -> ParsedMonth | None:
     discounts, discount_issues = extract_discounts(month_data)
     incomes, income_issues = extract_incomes(month_data)
     expenses, expense_issues = extract_expenses(month_data)
-    overtime, overtime_issues = extract_overtime(month_data)
 
     return ParsedMonth(
         month_key=month_key,
@@ -299,6 +250,5 @@ def parse_month(month_data: dict) -> ParsedMonth | None:
         discounts=discounts,
         incomes=incomes,
         expenses=expenses,
-        overtime=overtime,
-        issues=[*discount_issues, *income_issues, *expense_issues, *overtime_issues],
+        issues=[*discount_issues, *income_issues, *expense_issues],
     )

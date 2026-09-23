@@ -52,26 +52,28 @@ def calculate_base_hour_value(base_salary: Decimal) -> Decimal:
     return _money(base_salary / Decimal('240'))
 
 
-def calculate_overtime_income(base_salary: Decimal, overtime_hours: dict[str, Decimal | int | float]) -> Decimal:
+def calculate_overtime_income(base_salary: Decimal, overtime_entries: list[dict[str, object]] | list[object]) -> Decimal:
     base_salary = _money(base_salary)
     if base_salary < 0:
         raise ValueError('base_salary cannot be negative')
 
     base_hour_value = base_salary / Decimal('240')
-    ordinary_day = Decimal(str(overtime_hours.get('ordinary_day_hours', 0)))
-    ordinary_night = Decimal(str(overtime_hours.get('ordinary_night_hours', 0)))
-    sunday_day = Decimal(str(overtime_hours.get('sunday_day_hours', 0)))
-    sunday_night = Decimal(str(overtime_hours.get('sunday_night_hours', 0)))
-
-    if ordinary_day < 0 or ordinary_night < 0 or sunday_day < 0 or sunday_night < 0:
-        raise ValueError('overtime hours cannot be negative')
-
-    total = (
-        (ordinary_day * base_hour_value * OVERTIME_MULTIPLIERS['ordinary_day'])
-        + (ordinary_night * base_hour_value * OVERTIME_MULTIPLIERS['ordinary_night'])
-        + (sunday_day * base_hour_value * OVERTIME_MULTIPLIERS['sunday_day'])
-        + (sunday_night * base_hour_value * OVERTIME_MULTIPLIERS['sunday_night'])
-    )
+    total = Decimal('0')
+    for entry in overtime_entries:
+        if isinstance(entry, dict):
+            hours = Decimal(str(entry.get('hours', 0)))
+            overtime_type = entry.get('type')
+            shift = entry.get('shift')
+        else:
+            hours = Decimal(str(getattr(entry, 'hours', 0)))
+            overtime_type = getattr(entry, 'type', None)
+            shift = getattr(entry, 'shift', None)
+        if hours < 0:
+            raise ValueError('overtime hours cannot be negative')
+        multiplier = OVERTIME_MULTIPLIERS.get(f'{overtime_type}_{shift}')
+        if multiplier is None:
+            raise ValueError('invalid overtime type or shift')
+        total += hours * base_hour_value * multiplier
     return _money(total)
 
 

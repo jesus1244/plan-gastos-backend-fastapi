@@ -25,7 +25,7 @@ class Budget(Base):
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     user = relationship('User', backref='budgets')
-    overtime = relationship('Overtime', uselist=False, back_populates='budget', cascade='all, delete-orphan')
+    overtime_entries = relationship('OvertimeEntry', back_populates='budget', cascade='all, delete-orphan')
     salary_discounts = relationship('SalaryDiscount', back_populates='budget', cascade='all, delete-orphan')
     incomes = relationship('Income', back_populates='budget', cascade='all, delete-orphan')
     expenses = relationship('Expense', back_populates='budget', cascade='all, delete-orphan')

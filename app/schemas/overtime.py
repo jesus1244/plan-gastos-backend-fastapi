@@ -1,33 +1,42 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+OvertimeType = Literal['ordinary', 'sunday']
+OvertimeShift = Literal['day', 'night']
 
 
 class OvertimeCreate(BaseModel):
-    ordinary_day_hours: Decimal = Field(..., description='Ordinary day hours')
-    ordinary_night_hours: Decimal = Field(..., description='Ordinary night hours')
-    sunday_day_hours: Decimal = Field(..., description='Sunday day hours')
-    sunday_night_hours: Decimal = Field(..., description='Sunday night hours')
+    date: date
+    hours: Decimal = Field(gt=0, max_digits=8, decimal_places=2)
+    type: OvertimeType
+    shift: OvertimeShift
+    start_time: time | None = None
+    end_time: time | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
     model_config = ConfigDict(extra='forbid')
 
-    @field_validator('ordinary_day_hours', 'ordinary_night_hours', 'sunday_day_hours', 'sunday_night_hours')
-    @classmethod
-    def validate_hours(cls, value: Decimal) -> Decimal:
-        if value < 0:
-            raise ValueError('hours must be greater than or equal to 0')
-        return value.quantize(Decimal('0.01'))
+    @model_validator(mode='after')
+    def validate_time_pair(self) -> 'OvertimeCreate':
+        if (self.start_time is None) != (self.end_time is None):
+            raise ValueError('start_time and end_time must be provided together')
+        return self
+
+    @model_validator(mode='after')
+    def normalize_description(self) -> 'OvertimeCreate':
+        if self.description is not None:
+            self.description = self.description.strip() or None
+        return self
 
 
-class OvertimeResponse(BaseModel):
+class OvertimeResponse(OvertimeCreate):
+    id: str
     budget_id: str
-    ordinary_day_hours: Decimal
-    ordinary_night_hours: Decimal
-    sunday_day_hours: Decimal
-    sunday_night_hours: Decimal
     created_at: datetime
     updated_at: datetime
 

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database.models.budget import Budget
 from app.infrastructure.database.models.expense import Expense
 from app.infrastructure.database.models.income import Income
-from app.infrastructure.database.models.overtime import Overtime
 from app.infrastructure.database.models.salary_discount import SalaryDiscount
 from app.infrastructure.database.models.user import User
 from app.infrastructure.migration.mapping import (
@@ -55,7 +54,6 @@ class MigrationSummary:
     discounts_migrated: int = 0
     incomes_migrated: int = 0
     expenses_migrated: int = 0
-    overtime_migrated: int = 0
     skipped_months: list[SkippedMonth] = field(default_factory=list)
     issues: list[MigrationIssue] = field(default_factory=list)
 
@@ -70,7 +68,6 @@ class MigrationSummary:
             f'  discounts migrated:   {self.discounts_migrated}',
             f'  incomes migrated:     {self.incomes_migrated}',
             f'  expenses migrated:    {self.expenses_migrated}',
-            f'  overtime migrated:    {self.overtime_migrated}',
             f'  months skipped:       {len(self.skipped_months)}',
             f'  errors:               {len(self.issues)}',
         ]
@@ -161,7 +158,7 @@ class FirestoreMigrator:
             return
 
         parsed = parse_month(month_data)
-        assert parsed is not None  # month_key and base_salary were already validated above
+        assert parsed is not None
 
         for issue in parsed.issues:
             summary.issues.append(MigrationIssue(firebase_uid, f'{month_key}', issue))
@@ -173,7 +170,6 @@ class FirestoreMigrator:
         summary.discounts_migrated += self._migrate_discounts(budget, parsed)
         summary.incomes_migrated += self._migrate_incomes(budget, parsed)
         summary.expenses_migrated += self._migrate_expenses(budget, parsed)
-        summary.overtime_migrated += self._migrate_overtime(budget, parsed)
 
     def _get_or_create_budget(self, user: User, parsed: ParsedMonth) -> tuple[Budget, bool]:
         existing = self._session.execute(
@@ -235,26 +231,3 @@ class FirestoreMigrator:
         if migrated:
             self._session.flush()
         return migrated
-
-    def _migrate_overtime(self, budget: Budget, parsed: ParsedMonth) -> int:
-        if parsed.overtime is None:
-            return 0
-
-        existing = self._session.execute(select(Overtime).where(Overtime.budget_id == budget.id)).scalar_one_or_none()
-        if existing is not None:
-            existing.ordinary_day_hours = parsed.overtime.ordinary_day_hours
-            existing.ordinary_night_hours = parsed.overtime.ordinary_night_hours
-            existing.sunday_day_hours = parsed.overtime.sunday_day_hours
-            existing.sunday_night_hours = parsed.overtime.sunday_night_hours
-        else:
-            self._session.add(
-                Overtime(
-                    budget_id=budget.id,
-                    ordinary_day_hours=parsed.overtime.ordinary_day_hours,
-                    ordinary_night_hours=parsed.overtime.ordinary_night_hours,
-                    sunday_day_hours=parsed.overtime.sunday_day_hours,
-                    sunday_night_hours=parsed.overtime.sunday_night_hours,
-                )
-            )
-        self._session.flush()
-        return 1
